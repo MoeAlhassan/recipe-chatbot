@@ -11,6 +11,9 @@ from typing import Final, List, Dict
 
 import litellm  # type: ignore
 from dotenv import load_dotenv
+import sqlite3
+from datetime import datetime
+from threading import Lock
 
 # Ensure the .env file is loaded as early as possible.
 load_dotenv(override=False)
@@ -35,17 +38,17 @@ You are **Chef-GPT**, a friendly yet precise recipe assistant.
 
 2. INSTRUCTIONS / RULES
 1. Always list *ingredients* before *steps*.
-2. Do **not** include any ingredient the user doesn’t have unless they allow substitutions. Clearly mark substitutions as *(substitution)* next to the ingredient.
+2. Do **not** include any ingredient the user doesn't have unless they allow substitutions. Clearly mark substitutions as *(substitution)* next to the ingredient.
 3. If no time limit is given, assume a 45-minute total cap, inclusive of preparation and cooking time.
 4. If the request is impossible, apologize once and suggest the closest feasible recipe.
 5. Never reveal your internal reasoning—only output the recipe card.
 6. When appropriate, provide a modular cooking framework to encourage flexibility and creativity.
-7. Before output, choose an emoji matching the recipe’s main category and prepend it to the title.
+7. Before output, choose an emoji matching the recipe's main category and prepend it to the title.
 
 
 
 3. USER MESSAGE
-The next message will be the user’s request in plain language. Extract or infer:
+The next message will be the user's request in plain language. Extract or infer:
 - available_ingredients
 - dietary_restrictions (default: none)
 - allergies / sensitivities (from current or past conversation if unstated)
@@ -210,3 +213,48 @@ def get_agent_response(messages: List[Dict[str, str]]) -> List[Dict[str, str]]: 
     # Append assistant's response to the history
     updated_messages = current_messages + [{"role": "assistant", "content": assistant_reply_content}]
     return updated_messages 
+
+# --- SQLite Tracing Utility -----------------------------------------------------
+
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'traces.db')
+DB_PATH = os.path.abspath(DB_PATH)
+_db_lock = Lock()
+
+def _init_db():
+    with _db_lock, sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS traces (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                user_query TEXT NOT NULL,
+                bot_response TEXT NOT NULL,
+                error TEXT,
+                metadata TEXT,
+                notes TEXT,
+                failure_modes TEXT
+            )
+        ''')
+        conn.commit()
+
+_init_db()
+
+def log_trace(user_query: str, bot_response: str, error: str = None, metadata: str = None) -> int:
+    """Log a chat interaction to the traces DB. Returns the trace ID."""
+    with _db_lock, sqlite3.connect(DB_PATH) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            '''INSERT INTO traces (timestamp, user_query, bot_response, error, metadata, notes, failure_modes)
+               VALUES (?, ?, ?, ?, ?, '', '')''',
+            (datetime.utcnow().isoformat(), user_query, bot_response, error, metadata)
+        )
+        conn.commit()
+        return cur.lastrowid
+
+def update_trace_annotation(trace_id: int, notes: str, failure_modes: str):
+    """Update notes and failure_modes for a given trace."""
+    with _db_lock, sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            'UPDATE traces SET notes = ?, failure_modes = ? WHERE id = ?',
+            (notes, failure_modes, trace_id)
+        )
+        conn.commit() 

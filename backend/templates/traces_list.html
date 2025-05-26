@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Trace List - Recipe Chatbot{% endblock %}
+
+{% block left_panel %}
+<h5 class="mb-3">All Traces</h5>
+<div class="list-group">
+    {% for trace in traces %}
+    <a href="/traces/{{ trace[0] }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+        <div>
+            <div class="fw-semibold">{{ trace[2][:60] }}{% if trace[2]|length > 60 %}...{% endif %}</div>
+            <small class="text-muted">{{ trace[1] }}</small>
+        </div>
+        <div>
+            {% if trace[5] %}
+                <span class="badge bg-danger bg-opacity-75">!</span>
+            {% else %}
+                <span class="badge bg-success">&#10003;</span>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block center_panel %}
+<div class="d-flex flex-column align-items-center justify-content-center h-100 text-center">
+    <h2 class="mb-3">Welcome to the Trace Annotation Tool</h2>
+    <p class="lead">Select a trace from the left to view and annotate details.</p>
+    <p class="text-muted">Use the right panel to filter, categorize, and analyze errors.</p>
+</div>
+{% endblock %}
+
+{% block right_panel %}
+<h6 class="mb-3">Results from Error Categorization</h6>
+<div class="d-flex flex-column gap-2">
+    {% for error, count in error_stats.items() %}
+        <span class="badge bg-secondary d-flex justify-content-between align-items-center p-2">
+            <span>{{ error }}</span>
+            <span class="badge bg-danger ms-2">{{ count }}</span>
+        </span>
+    {% endfor %}
+</div>
+{% endblock %} 
